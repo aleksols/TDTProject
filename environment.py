@@ -24,7 +24,8 @@ class MyEnv():
         state = state.copy()
         # cut track features from image
         state = self.transform_state(state)
-        state = state[None, :, :66, 15:81] # Add dummy dimension here
+        state = state[None, :, 18:-12, 15:-15] # Add dummy dimension here
+        # state = state[None]
         return state
 
     def _apply_action(self, action):

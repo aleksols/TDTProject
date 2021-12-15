@@ -17,9 +17,9 @@ from pprint import pprint
 from tqdm import tqdm
 
 PROCESSES = 5
-MODULAR = True
+MODULAR = False
 BATCH_SIZE = 32
-AUTOENCODER_EPOCHS = 25
+AUTOENCODER_EPOCHS = 40
 
 
 pi_losses = []
@@ -44,8 +44,8 @@ def train(
     store_states=False,
     clip_ratio=0.2,
     lr=3e-4, 
-    pi_lr=3e-5,
-    vf_lr=1e-4,
+    pi_lr=1e-3,
+    vf_lr=1e-3,
     train_pi_iters=20,
     train_v_iters=20,
     lam=0.9,
@@ -62,6 +62,7 @@ def train(
     logger.save_config(locals())
 
     # Random seed
+    seed += 10000 * proc_id()
     torch.manual_seed(seed)
     np.random.seed(seed)
     env = MyEnv(stack_images=image_stack, skip_actions=action_skip, grayscale=grayscale_transform, gas_factor=gas_factor, break_factor=break_factor)
@@ -345,29 +346,41 @@ def train_autoencoder(states, output_dir):
 
 def main():
     if MODULAR:
-        output_dir=f"experiments/100_epoch_modular_ppo_combined{time.time()}"
+        # output_dir=f"experiments/100_epoch_modular_ppo_combined{time.time()}"
         # output_dir="experiments/1639331332.810533"
-        encoder_dir = "experiments/encoder_pretrain_no_relu"
-        logger_kwargs = dict(output_dir=output_dir)
+        encoder_dir = "experiments/encoder_pretrain_no_relu_66_img"
+        # logger_kwargs = dict(output_dir=output_dir)
         mpi_fork(PROCESSES)
-        ac_kwargs = dict(encoder_path=f"{encoder_dir}/encoder_weights.pt", model_state_path="experiments/vpg_good/vars299.pkl")
-        train(epochs=300, actor_critic=ModularCatecoricalAC, ac_kwargs=ac_kwargs, logger_kwargs=logger_kwargs)
+        ac_kwargs = dict(encoder_path=f"{encoder_dir}/encoder_weights.pt")
+        train(epochs=300, actor_critic=ModularCatecoricalAC, ac_kwargs=ac_kwargs)
     else:
-        output_dir=f"experiments/100_epoch_ppo{time.time()}"
-        # output_dir="experiments/test"
-        logger_kwargs = dict(output_dir=output_dir)
+        # output_dir=f"experiments/100_epoch_ppo{time.time()}"
+        # # output_dir="experiments/test"
+        # logger_kwargs = dict(output_dir=output_dir)
         mpi_fork(PROCESSES)
-        # ac_kwargs = dict(model_state_path="experiments/ppo_good/vars.pkl")
+        # ac_kwargs = dict(model_state_path="experiments/100_epoch_ppo1639491161.8668485/vars80.pkl")
         ac_kwargs={}
-        train(logger_kwargs=logger_kwargs, ac_kwargs=ac_kwargs, gas_factor=1)
+        train(ac_kwargs=ac_kwargs)
 
 def train_encoder():
     output_dir=f"experiments/{time.time()}"
-    output_dir=f"experiments/encoder_pretrain_no_relu"
+    output_dir=f"experiments/encoder_pretrain_66_img_v2"
     logger_kwargs = dict(output_dir=output_dir, output_fname="pretrain.txt")
-    ac_kwargs = dict(model_state_path="experiments/ppo_good/vars.pkl")
-    train(epochs=1, env_interactions_per_process=10000,ac_kwargs={}, store_states=True, train_v_iters=1, train_pi_iters=1, logger_kwargs=logger_kwargs)
-    train_autoencoder(state_list, output_dir)
+    # ac_kwargs = dict(model_state_path="eexperiments/ppo_modular_good/vars100.pkl")
+    ac_path = "experiments/ppo_modular_good/pyt_save/model100.pt"
+    with open(ac_path, "rb") as f:
+        ac = torch.load(f)
+    env = MyEnv(gas_factor=0.3)
+    states = []
+    s = env.reset()
+    for i in tqdm(range(30000)):
+        a, _, _ = ac.step(s)
+        s, r, d = env.step(a)
+        states.append(s)
+        if d:
+            s = env.reset()
+    # train(epochs=1, env_interactions_per_process=10000,ac_kwargs={}, store_states=True, train_v_iters=1, train_pi_iters=1, logger_kwargs=logger_kwargs)
+    train_autoencoder(states, output_dir)
 
 if __name__ == "__main__":
     main()
